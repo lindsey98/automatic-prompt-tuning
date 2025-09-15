@@ -15,8 +15,20 @@ export OPENAI_API_KEY=YOUR_KEY
 
 ## Using `APT`
 
-- ```fatty_liver_init_prompt.txt```: initial prompt seed for fatty liver
-- ``predict_prompt.py``: prompt tuning for predicting fatty liver
-- ```elevated_fbg_init_prompt.txt```: initial prompt seed for FBG
-- ``predict_prompt_diabete.py``: prompt tuning for predicting FBG
+- ```prompts/fatty_liver_init_prompt.txt```: initial prompt seed for fatty liver
+- ```prompts/elevated_fbg_init_prompt.txt```: initial prompt seed for FBG
+
+### Run prompt tuning for predicting fatty liver
+Run
+```commandline
+python predict_prompt.py
+```
+
+the predicted results will be saved under ``outputs/``
+
+### Run prompt tuning for predicting FBG
+Run
+```commandline
+python predict_prompt_diabete.py
+```
 
