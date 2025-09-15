@@ -367,19 +367,22 @@ if __name__ == '__main__':
     ###
 
     '''Prompt tuning'''
-    p_star, train_acc, valid_acc = prompt_auto_tune(
-        grouped_dict_list=grouped_dict_list,
-        model_eval=model_name,
-        seed=42,
-        train_ratio=0.8,
-        batch_size=8,
-        epochs=10,
-        num_init_cands_per_batch=2,
-        num_refine_cands=10,
-    )
-    print("\n=== Best Prompt (p*) ===\n", p_star)
+    # p_star, train_acc, valid_acc = prompt_auto_tune(
+    #     grouped_dict_list=grouped_dict_list,
+    #     model_eval=model_name,
+    #     seed=42,
+    #     train_ratio=0.8,
+    #     batch_size=8,
+    #     epochs=10,
+    #     num_init_cands_per_batch=2,
+    #     num_refine_cands=10,
+    # )
+    # print("\n=== Best Prompt (p*) ===\n", p_star)
+    # with open("./prompts/elevated_fbg_final_prompt.txt", "w") as f:
+    #     f.write(p_star)
 
     '''Final prediction'''
+    p_star = open("./prompts/elevated_fbg_final_prompt.txt").read()
     samples_all = make_samples_from_grouped(grouped_dict_list,
                                             min_k=3,
                                             label_field="Elevated_FBG",
