@@ -13,7 +13,7 @@ And add your OPENAI_API_KEY with the following command:
 export OPENAI_API_KEY=YOUR_KEY
 ```
 
-## Using `APE`
+## Using `APT`
 
 - ```fatty_liver_init_prompt.txt```: initial prompt seed for fatty liver
 - ``predict_prompt.py``: prompt tuning for predicting fatty liver
