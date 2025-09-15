@@ -21,7 +21,7 @@ from llm_utils import _async_evaluate_prompt_full, _async_call_predict_one, _asy
 # ========== 并发与缓存设置 ==========
 ASYNC_CONCURRENCY=16
 PRED_CACHE: Dict[Tuple[str, str], Dict] = {}  # (prompt_hash, records_sig) -> parsed_pred
-INIT_PROMPT_SEED = open("./fatty_liver_init_prompt.txt").read()
+INIT_PROMPT_SEED = open("./prompts/fatty_liver_init_prompt.txt").read()
 
 # ========= 硬性字段约束 =========
 REQUIRED_KEYS = [
@@ -300,7 +300,7 @@ def save_merged_predictions_overwrite(df_original: pd.DataFrame,
 # ========= 入口 =========
 if __name__ == '__main__':
     # 你的 CSV 文件路径
-    df = pd.read_csv("Fat_40samples.csv")
+    df = pd.read_csv("datasets/Fat_40samples.csv")
     out_csv = "Fat_40sample_with_model_outputs_merged.csv"
     model_name = "gpt-4o-mini"
 
