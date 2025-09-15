@@ -356,7 +356,7 @@ if __name__ == '__main__':
 
     df_merged = df.merge(df_pred, on=["ID", "Check-up ID"], how="left")
     df_merged.to_csv(init_out_csv, index=False, encoding="utf-8-sig")
-    ###
+    # ###
 
     '''Prompt tuning'''
     p_star, train_acc, valid_acc = prompt_auto_tune(
@@ -370,15 +370,18 @@ if __name__ == '__main__':
         num_refine_cands=10,
     )
     print("\n=== Best Prompt (p*) ===\n", p_star)
+    with open("./prompts/fatty_liver_final_prompt.txt", "w") as f:
+        f.write(p_star)
 
     '''Final prediction'''
+    p_star = open("./prompts/fatty_liver_final_prompt.txt").read()
     samples_all = make_samples_from_grouped(grouped_dict_list,
                                             min_k=3,
                                             label_field="Fatty_Liver",
                                             drop_keys=["Fatty_Liver"])
     full_ds = [(x, y) for (x,y,_) in samples_all]
     acc = evaluate_prompt("gpt-4o-mini", p_star, full_ds)
-    print(f"[Final] Full acc={acc:.4f}")
+    print(f"[Final] Full acc={acc:.4f}") # 0.86
 
     df_pred = build_prediction_df(
         grouped_dict_list=grouped_dict_list,
