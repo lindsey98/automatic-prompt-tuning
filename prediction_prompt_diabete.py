@@ -19,7 +19,7 @@ from utils import *
 from llm_utils import _async_evaluate_prompt_full, _async_call_predict_one, _async_predict_labels, gen_initial_prompts
 
 # ========== 并发与缓存设置 ==========
-ASYNC_CONCURRENCY=8
+ASYNC_CONCURRENCY=16
 PRED_CACHE: Dict[Tuple[str, str], Dict] = {}  # (prompt_hash, records_sig) -> parsed_pred
 INIT_PROMPT_SEED = open("./elevated_fbg_init_prompt.txt").read()
 

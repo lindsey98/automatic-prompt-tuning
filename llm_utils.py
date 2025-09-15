@@ -16,7 +16,8 @@ except Exception:
 from openai import OpenAI, AsyncOpenAI
 from utils import prompt_hash, records_sig, parse_pred, validate_and_normalize_pred, get_pred_label
 
-ASYNC_CONCURRENCY = 8
+ASYNC_CONCURRENCY = 16
+
 # ========= 提示生成与精修（加入硬性字段要求） =========
 def gen_initial_prompts(client: OpenAI, model: str, batches: List[List[Tuple[List[Dict], int]]], initial_prompt_seed: str,
                         label_field: str, num_candidates_per_batch=2):
@@ -56,7 +57,9 @@ def gen_initial_prompts(client: OpenAI, model: str, batches: List[List[Tuple[Lis
 
 # ========= 异步预测（带指数退避 + 字段校验 + 重试 + 缓存） =========
 async def _async_call_predict_one(async_client: AsyncOpenAI, model: str, p_sys: str, prefix_records: List[Dict],
-                                  PRED_CACHE: Dict[Tuple[str, str], Dict], REQUIRED_KEYS: List[str], RESPONSE_SCHEMA: Dict,
+                                  PRED_CACHE: Dict[Tuple[str, str], Dict],
+                                  REQUIRED_KEYS: List[str],
+                                  RESPONSE_SCHEMA: Dict,
                                   label_field: str,
                                   use_cache: bool = True, use_schema=True):
 

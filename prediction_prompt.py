@@ -19,7 +19,7 @@ from utils import *
 from llm_utils import _async_evaluate_prompt_full, _async_call_predict_one, _async_predict_labels, gen_initial_prompts
 
 # ========== 并发与缓存设置 ==========
-ASYNC_CONCURRENCY=8
+ASYNC_CONCURRENCY=16
 PRED_CACHE: Dict[Tuple[str, str], Dict] = {}  # (prompt_hash, records_sig) -> parsed_pred
 INIT_PROMPT_SEED = open("./fatty_liver_init_prompt.txt").read()
 
@@ -144,7 +144,8 @@ def prompt_auto_tune(
     # --- 初始候选提示 ---
     init_prompts = gen_initial_prompts(client, model_eval, batches,
                                        initial_prompt_seed=INIT_PROMPT_SEED,
-                                       label_field="Fatty_Liver", num_candidates_per_batch=num_init_cands_per_batch)
+                                       label_field="Fatty_Liver",
+                                       num_candidates_per_batch=num_init_cands_per_batch)
 
     # --- 选择初始 p*（全量并发评估；采样不变）---
     scores = []
@@ -299,7 +300,7 @@ def save_merged_predictions_overwrite(df_original: pd.DataFrame,
 # ========= 入口 =========
 if __name__ == '__main__':
     # 你的 CSV 文件路径
-    df = pd.read_csv("Fat_40sample_with_visit4_predictions.csv")
+    df = pd.read_csv("Fat_40samples.csv")
     out_csv = "Fat_40sample_with_model_outputs_merged.csv"
     model_name = "gpt-4o-mini"
 
@@ -338,7 +339,7 @@ if __name__ == '__main__':
         batch_size=8,
         epochs=10,
         num_init_cands_per_batch=2,
-        num_refine_cands=5,
+        num_refine_cands=10,
     )
     print("\n=== Best Prompt (p*) ===\n", p_star)
     # p_star = """You are a hepatologist and endocrinologist with over 10 years of experience. Analyze k-1 consecutive check-up records. If records are fewer than three visits, return 'Fatty_Liver' as 0 and note insufficient data.
