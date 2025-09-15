@@ -17,6 +17,7 @@ except Exception:
 from openai import OpenAI, AsyncOpenAI
 from utils import *
 from llm_utils import _async_evaluate_prompt_full, _async_call_predict_one, _async_predict_labels, gen_initial_prompts
+import os
 
 # ========== 并发与缓存设置 ==========
 ASYNC_CONCURRENCY=16
@@ -305,7 +306,9 @@ def save_merged_predictions_overwrite(df_original: pd.DataFrame,
 if __name__ == '__main__':
     # 你的 CSV 文件路径
     df = pd.read_csv("./datasets/Diabetes_60samples.csv")
-    out_csv = "Diabetes_60samples_with_model_outputs_merged.csv"
+    os.makedirs("outputs", exist_ok=True)
+    init_out_csv = "outputs/Diabetes_60samples_with_model_outputs_init.csv"
+    final_out_csv = "outputs/Diabetes_60samples_with_model_outputs_merged.csv"
     model_name = "gpt-4o-mini"
 
     keep_cols = [
@@ -341,6 +344,29 @@ if __name__ == '__main__':
     df_subset = df[keep_cols]
     grouped_dict_list = [group.to_dict(orient="records") for _, group in df_subset.groupby("ID")]
 
+    '''Initial prediction'''
+    samples_all = make_samples_from_grouped(grouped_dict_list,
+                                            min_k=3,
+                                            label_field="Elevated_FBG",
+                                            drop_keys=["Elevated_FBG"])
+    full_ds = [(x, y) for (x,y,_) in samples_all]
+    acc = evaluate_prompt("gpt-4o-mini", INIT_PROMPT_SEED, full_ds)
+    print(f"[Final] Full acc={acc:.4f}")
+
+    df_pred = build_prediction_df(
+        grouped_dict_list=grouped_dict_list,
+        p_sys=INIT_PROMPT_SEED,
+        model=model_name,
+        min_k=3,
+        drop_keys=["Elevated_FBG"],  # 防泄漏
+        reasons_joiner=" | "  # 将列表拼成可读字符串
+    )
+
+    df_merged = df.merge(df_pred, on=["ID", "Check-up ID"], how="left")
+    df_merged.to_csv(init_out_csv, index=False, encoding="utf-8-sig")
+    ###
+
+    '''Prompt tuning'''
     p_star, train_acc, valid_acc = prompt_auto_tune(
         grouped_dict_list=grouped_dict_list,
         model_eval=model_name,
@@ -349,29 +375,27 @@ if __name__ == '__main__':
         batch_size=8,
         epochs=10,
         num_init_cands_per_batch=2,
-        num_refine_cands=5,
+        num_refine_cands=10,
     )
     print("\n=== Best Prompt (p*) ===\n", p_star)
 
+    '''Final prediction'''
     samples_all = make_samples_from_grouped(grouped_dict_list,
                                             min_k=3,
                                             label_field="Elevated_FBG",
-                                            drop_keys=["Reasons","Reasons_str","Predicted_subtype", "Elevated_FBG"])
+                                            drop_keys=["Elevated_FBG"])
     full_ds = [(x, y) for (x,y,_) in samples_all]
     acc = evaluate_prompt("gpt-4o-mini", p_star, full_ds)
     print(f"[Final] Full acc={acc:.4f}")
 
-    # ===== 新增：批量预测并合并保存
     df_pred = build_prediction_df(
         grouped_dict_list=grouped_dict_list,
         p_sys=p_star,
         model=model_name,
         min_k=3,
-        drop_keys=["Reasons","Reasons_str","Predicted_subtype","Elevated_FBG"],  # 防泄漏
+        drop_keys=["Elevated_FBG"],  # 防泄漏
         reasons_joiner=" | "  # 将列表拼成可读字符串
     )
 
-    target_cols = ["Trend","Reasons","Most_important_indicator","Confidence","Predicted_subtype","Elevated_FBG"]
-    df_base = df.drop(target_cols, axis=1)
-    df_merged = df_base.merge(df_pred, on=["ID", "Check-up ID"], how="left")
-    df_merged.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    df_merged = df.merge(df_pred, on=["ID", "Check-up ID"], how="left")
+    df_merged.to_csv(final_out_csv, index=False, encoding="utf-8-sig")

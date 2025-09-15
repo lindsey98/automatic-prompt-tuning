@@ -17,6 +17,7 @@ except Exception:
 from openai import OpenAI, AsyncOpenAI
 from utils import *
 from llm_utils import _async_evaluate_prompt_full, _async_call_predict_one, _async_predict_labels, gen_initial_prompts
+import os
 
 # ========== 并发与缓存设置 ==========
 ASYNC_CONCURRENCY=16
@@ -58,7 +59,13 @@ def evaluate_prompt(model: str, p_sys: str, dataset: List[Tuple[List[Dict], int]
                                                    label_field="Fatty_Liver"))
 
 
-def refine_prompts_from_feedback(client: OpenAI, model: str, p_star: str, batch: List[Tuple[List[Dict], int]], num_candidates=3):
+def refine_prompts_from_feedback(
+    client: OpenAI,
+    model: str,
+    p_star: str,
+    batch: List[Tuple[List[Dict], int]],
+    num_candidates=3
+):
     examples = []
     for (prefix, gold, meta) in batch[:6]:
         ex = {"k": meta["k"], "records": prefix, "gold": gold}
@@ -108,7 +115,6 @@ def refine_prompts_from_feedback(client: OpenAI, model: str, p_star: str, batch:
             candidates.append(txt)
     return candidates
 
-
 def prompt_auto_tune(
     grouped_dict_list: List[List[Dict]],
     model_eval="gpt-4o-mini",
@@ -127,7 +133,7 @@ def prompt_auto_tune(
     samples_all = make_samples_from_grouped(grouped_dict_list,
                                             min_k=3,
                                             label_field="Fatty_Liver",
-                                            drop_keys=["Reasons","Reasons_str","Predicted_subtype","Fatty_Liver"])
+                                            drop_keys=["Fatty_Liver"])
     random.shuffle(samples_all)
 
     # train/valid split
@@ -301,7 +307,9 @@ def save_merged_predictions_overwrite(df_original: pd.DataFrame,
 if __name__ == '__main__':
     # 你的 CSV 文件路径
     df = pd.read_csv("datasets/Fat_40samples.csv")
-    out_csv = "Fat_40sample_with_model_outputs_merged.csv"
+    os.makedirs("outputs", exist_ok=True)
+    init_out_csv = "outputs/Fat_40sample_with_model_outputs_init.csv"
+    final_out_csv = "outputs/Fat_40sample_with_model_outputs_merged.csv"
     model_name = "gpt-4o-mini"
 
     keep_cols = [
@@ -322,15 +330,35 @@ if __name__ == '__main__':
         "GGT",
         "ALP",
         "HbA1c",
-        "Reasons",
-        "Reasons_str",
-        "Predicted_subtype",
         "Fatty_Liver"
     ]
 
     df_subset = df[keep_cols]
     grouped_dict_list = [group.to_dict(orient="records") for _, group in df_subset.groupby("ID")]
 
+    '''Initial prediction'''
+    samples_all = make_samples_from_grouped(grouped_dict_list,
+                                            min_k=3,
+                                            label_field="Fatty_Liver",
+                                            drop_keys=["Fatty_Liver"])
+    full_ds = [(x, y) for (x,y,_) in samples_all]
+    acc = evaluate_prompt("gpt-4o-mini", INIT_PROMPT_SEED, full_ds)
+    print(f"[Final] Full acc={acc:.4f}")
+
+    df_pred = build_prediction_df(
+        grouped_dict_list=grouped_dict_list,
+        p_sys=INIT_PROMPT_SEED,
+        model=model_name,
+        min_k=3,
+        drop_keys=["Fatty_Liver"],  # 防泄漏
+        reasons_joiner=" | "  # 将列表拼成可读字符串
+    )
+
+    df_merged = df.merge(df_pred, on=["ID", "Check-up ID"], how="left")
+    df_merged.to_csv(init_out_csv, index=False, encoding="utf-8-sig")
+    ###
+
+    '''Prompt tuning'''
     p_star, train_acc, valid_acc = prompt_auto_tune(
         grouped_dict_list=grouped_dict_list,
         model_eval=model_name,
@@ -342,46 +370,24 @@ if __name__ == '__main__':
         num_refine_cands=10,
     )
     print("\n=== Best Prompt (p*) ===\n", p_star)
-    # p_star = """You are a hepatologist and endocrinologist with over 10 years of experience. Analyze k-1 consecutive check-up records. If records are fewer than three visits, return 'Fatty_Liver' as 0 and note insufficient data.
-    # Critical thresholds: Triglycerides (TG > 1.7 mmol/L), LDL (LDL > 3.0 mmol/L), HDL (<1.0 mmol/L for men, <1.3 mmol/L for women), and Blood Glucose (>5.5 mmol/L). Identify weight trends using a median approach across visits, noting any increase >2 kg as critical and a decrease ≤2 kg as a minor concern.
-    # Prioritize indicators in decision-making: TG, HDL, weight change.
-    # Any LDL >3.0 mmol/L indicates increased concern regardless of other findings.
-    # Handle null values by reporting as 'NaN' and note their impact on analyses.
-    # Define confidence levels: High for consistent markers, Medium for some concerns, Low for misalignment across visits.
-    # Clarify subtype logic based on weight and lipid profiles: Obesity-related, Hyperlipidemia-related, ALT-dominant, Mixed metabolic.
-    # OUTPUT MUST BE STRICT JSON with ALL keys present exactly as specified below.",
-    # "output_format": {
-    #     "Trend": "<gradual increase / sudden increase / fluctuating / no clear trend>",
-    #     "Reasons": [
-    #       "Reason 1 with values",
-    #       "Reason 2",
-    #       "Reason 3"
-    #     ],
-    #     "Most_important_indicator": "<BMI / ALT / TG / ultrasound finding / you name it>",
-    #     "Confidence": "<High / Medium / Low>",
-    #     "Predicted_subtype": "<Obesity-related / Hyperlipidemia-related / ALT-dominant / Mixed metabolic / you name it>",
-    #     "Fatty_Liver": <0 or 1>
-    # }
-    # """
+
+    '''Final prediction'''
     samples_all = make_samples_from_grouped(grouped_dict_list,
                                             min_k=3,
                                             label_field="Fatty_Liver",
-                                            drop_keys=["Reasons","Reasons_str","Predicted_subtype", "Fatty_Liver"])
+                                            drop_keys=["Fatty_Liver"])
     full_ds = [(x, y) for (x,y,_) in samples_all]
     acc = evaluate_prompt("gpt-4o-mini", p_star, full_ds)
     print(f"[Final] Full acc={acc:.4f}")
 
-    # ===== 新增：批量预测并合并保存
     df_pred = build_prediction_df(
         grouped_dict_list=grouped_dict_list,
         p_sys=p_star,
         model=model_name,
         min_k=3,
-        drop_keys=["Reasons","Reasons_str","Predicted_subtype","Fatty_Liver"],  # 防泄漏
+        drop_keys=["Fatty_Liver"],  # 防泄漏
         reasons_joiner=" | "  # 将列表拼成可读字符串
     )
 
-    target_cols = ["Trend","Reasons","Most_important_indicator","Confidence","Predicted_subtype","Fatty_Liver"]
-    df_base = df.drop(target_cols, axis=1)
-    df_merged = df_base.merge(df_pred, on=["ID", "Check-up ID"], how="left")
-    df_merged.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    df_merged = df.merge(df_pred, on=["ID", "Check-up ID"], how="left")
+    df_merged.to_csv(final_out_csv, index=False, encoding="utf-8-sig")
