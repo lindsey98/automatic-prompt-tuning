@@ -14,7 +14,7 @@ except Exception:
         return x
 
 from openai import OpenAI, AsyncOpenAI
-from .utils import prompt_hash, records_sig, parse_pred, validate_and_normalize_pred, get_pred_label
+from utils import prompt_hash, records_sig, parse_pred, validate_and_normalize_pred, get_pred_label
 
 ASYNC_CONCURRENCY = 8
 # ========= 提示生成与精修（加入硬性字段要求） =========
